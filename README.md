@@ -43,6 +43,20 @@ YOLO26-s, 1024 px, best epoch 43 of 73 (early stopping, patience 30). Trained in
 
 Inference: ~8 ms per image at 1024 px on the laptop GPU.
 
+#### Where the errors are
+
+| PR curve (test) | Confusion matrix (test, normalised by true class) |
+|---|---|
+| ![pr](results/pr_curve_test.png) | ![cm](results/confusion_matrix_test.png) |
+
+- **Impacted** teeth are nearly solved (AP50 0.93) and are never lost to background.
+- **Caries ↔ Deep Caries** is the dominant confusion (~34% each way). These are adjacent severity grades of the same
+  disease, and the boundary is also where the test set's treatment-code labels differ most from DENTEX's.
+- **Periapical lesions** are the rarest class (134 training boxes). 19% are missed entirely, which matches their low recall
+  ceiling in the conformal analysis below.
+
+Validation-set versions: [PR curve](results/pr_curve_val.png) · [confusion matrix](results/confusion_matrix_val.png).
+
 ### Example outputs
 
 Top: ground truth. Bottom: prediction, with the thin outer box showing the 90% conformal box interval.
