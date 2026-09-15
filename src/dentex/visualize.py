@@ -12,18 +12,23 @@ from dentex.uncertainty.matching import match_detections
 CLASS_COLORS = [(0, 159, 230), (0, 114, 213), (167, 121, 204), (115, 158, 0), (66, 228, 240)]
 
 
-def _label(img, text, x, y, color, scale):
+def _label(img, text, x, y, color, scale, placed=None):
     th = max(1, int(scale * 2))
     (tw, tht), base = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, th)
-    y = max(int(y), tht + base)
-    cv2.rectangle(img, (int(x), y - tht - base), (int(x) + tw, y), color, -1)
-    cv2.putText(img, text, (int(x), y - base), cv2.FONT_HERSHEY_SIMPLEX, scale, (255, 255, 255), th, cv2.LINE_AA)
+    x, y = int(x), max(int(y), tht + base)
+    if placed is not None:  # nudge down past labels already drawn so they never overlap
+        while any(x < px2 and px1 < x + tw and y - tht - base < py2 and py1 < y for px1, py1, px2, py2 in placed):
+            y += tht + base + 2
+        placed.append((x, y - tht - base, x + tw, y))
+    cv2.rectangle(img, (x, y - tht - base), (x + tw, y), color, -1)
+    cv2.putText(img, text, (x, y - base), cv2.FONT_HERSHEY_SIMPLEX, scale, (255, 255, 255), th, cv2.LINE_AA)
 
 
 def draw(image, boxes: Boxes, names, title, margins=None, stats=None):
     img = image.copy()
     h, w = img.shape[:2]
     scale, lw = max(w / 2400, 0.6), max(2, w // 700)
+    placed = []
     for i, (b, c) in enumerate(zip(boxes.xyxy, boxes.cls)):
         color = CLASS_COLORS[int(c) % len(CLASS_COLORS)]
         if margins is not None and np.isfinite(margins[i]):
@@ -35,7 +40,7 @@ def draw(image, boxes: Boxes, names, title, margins=None, stats=None):
             text += f" {boxes.conf[i]:.2f}"
         if stats is not None:
             text += f" H={stats['entropy'][i]:.2f}"
-        _label(img, text, b[0], b[1] - 4, color, scale)
+        _label(img, text, b[0], b[1] - 4, color, scale, placed)
     _label(img, title, 10, 10 + 40 * scale, (40, 40, 40), scale * 1.4)
     return img
 

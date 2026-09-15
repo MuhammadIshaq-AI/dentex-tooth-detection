@@ -11,3 +11,4 @@ scikit-learn
 tqdm
 pyyaml
 pytest
+gradio>=5.0
