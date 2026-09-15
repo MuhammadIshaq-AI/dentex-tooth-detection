@@ -53,6 +53,19 @@ def has_dropout(model: nn.Module) -> bool:
     return any(isinstance(m, MCDropout2d) for m in model.modules())
 
 
+def _inference_network(predictor_model):
+    """The nn.Module that actually runs inference and carries MCDropout2d layers.
+
+    Ultralytics' AutoBackend keeps the PyTorch network on a non-Module ``backend`` object and
+    exposes it via a ``model`` property, so ``AutoBackend.modules()`` never reaches the dropout.
+    """
+    backend = getattr(predictor_model, "backend", None)
+    for cand in (predictor_model, getattr(predictor_model, "model", None), getattr(backend, "model", None)):
+        if isinstance(cand, nn.Module) and has_dropout(cand):
+            return cand
+    return None
+
+
 def dropout_training_callback(p: float):
     """Ultralytics ``on_pretrain_routine_end`` callback: inject into both model and EMA."""
 
@@ -73,8 +86,8 @@ def mc_predict(yolo, image_paths, T=20, imgsz=1024, conf=0.01, batch=4, iou_thr=
     from dentex.labels import predict
 
     predict(yolo, image_paths[:1], imgsz=imgsz, conf=conf, batch=1)  # build predictor
-    net = yolo.predictor.model
-    if not has_dropout(net):
+    net = _inference_network(yolo.predictor.model)
+    if net is None:
         raise RuntimeError("model has no MCDropout2d layers; train with configs/train_mcdropout.yaml")
     set_mc(net, True)
     try:

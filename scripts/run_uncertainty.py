@@ -131,37 +131,65 @@ def main():
     # ---------------------------------------------------------------- 2. conformal
     cp = ConformalDetector(alpha=args.alpha).fit(cal["mp"], cal["mg"], cal["mc"], cal["gt_s"], cal["gt_c"])
     nonconf = box_nonconformity(tst["mp"], tst["mg"])
-    rec_cp, prec_cp = threshold_metrics(test_pred, test_gt, cp.threshold, nc)
     rec_fx, prec_fx = threshold_metrics(test_pred, test_gt, lambda c: args.deploy_conf, nc)
+    # recall ceiling on calib: fraction of GT objects matched by *any* prediction (conf >= floor)
+    ceiling = {c: float((cal["gt_s"][cal["gt_c"] == c] > 0).mean()) for c in range(nc)}
     rows = []
     for c in range(nc):
         m = tst["mc"] == c
         rows.append({"class": cls_names[c], "box_margin_q": cp.margin(c),
                      "box_coverage": float((nonconf[m] <= cp.margin(c)).mean()) if m.any() else np.nan,
-                     "matched_boxes": int(m.sum()), "conformal_threshold": cp.threshold(c),
-                     "recall_conformal": rec_cp[c], "precision_conformal": prec_cp[c],
+                     "matched_boxes": int(m.sum()), "calib_recall_ceiling": ceiling[c],
                      f"recall@{args.deploy_conf}": rec_fx[c], f"precision@{args.deploy_conf}": prec_fx[c]})
     conf_df = pd.DataFrame(rows)
     conf_df.to_csv(out / "uncertainty_conformal.csv", index=False)
+
+    # recall-controlling thresholds at several risk levels; infeasible when the calib recall
+    # ceiling is below 1 - alpha (the guarantee then degenerates to "keep every detection")
+    risk_rows = []
+    for a in (0.1, 0.2, 0.3, 0.5):
+        cpa = ConformalDetector(alpha=a).fit(cal["mp"], cal["mg"], cal["mc"], cal["gt_s"], cal["gt_c"])
+        rec, prec = threshold_metrics(test_pred, test_gt, cpa.threshold, nc)
+        for c in range(nc):
+            feasible = cpa.threshold(c) > 0
+            risk_rows.append({"class": cls_names[c], "alpha": a, "target_recall": 1 - a, "feasible": feasible,
+                              "threshold": cpa.threshold(c) if feasible else np.nan,
+                              "test_recall": rec[c] if feasible else np.nan,
+                              "test_precision": prec[c] if feasible else np.nan})
+    risk_df = pd.DataFrame(risk_rows)
+    risk_df.to_csv(out / "uncertainty_recall_control.csv", index=False)
     (out / "conformal_params.json").write_text(json.dumps(
         {"alpha": args.alpha, "margins": cp.margins, "thresholds": cp.thresholds,
          "platt": {str(k): v for k, v in platt.params.items()}, "platt_global": platt.global_params},
         indent=2, default=float))
 
-    fig, axes = plt.subplots(1, 2, figsize=(9.6, 3.8), facecolor=SURFACE)
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.2), facecolor=SURFACE)
     x = np.arange(nc)
-    for ax, col, title in [(axes[0], "box_coverage", "Box-interval coverage"),
-                           (axes[1], "recall_conformal", "Recall at conformal threshold")]:
-        style_axes(ax)
-        vals = conf_df[col].to_numpy()
-        ax.bar(x, vals, width=0.6, color=SERIES[:nc], edgecolor=SURFACE, linewidth=2)
-        ax.axhline(1 - args.alpha, color=INK2, linewidth=1, linestyle=(0, (4, 3)))
-        ax.text(nc - 0.5, 1 - args.alpha + 0.015, f"target {1 - args.alpha:.0%}", color=INK2, fontsize=8, ha="right")
-        for xi, v in zip(x, vals):
-            if np.isfinite(v):
-                ax.text(xi, v + 0.015, f"{v:.0%}", ha="center", color=INK, fontsize=9)
-        ax.set_xticks(x, cls_names, fontsize=8.5); ax.set_ylim(0, 1.08)
-        ax.set_title(title, color=INK, loc="left", fontsize=11)
+    ax = axes[0]
+    style_axes(ax)
+    vals = conf_df["box_coverage"].to_numpy()
+    ax.bar(x, vals, width=0.6, color=SERIES[:nc], edgecolor=SURFACE, linewidth=2)
+    ax.axhline(1 - args.alpha, color=INK2, linewidth=1, linestyle=(0, (4, 3)))
+    for xi, v in zip(x, vals):
+        if np.isfinite(v):  # label inside the bar, clear of the target line
+            ax.text(xi, v - 0.06, f"{v:.0%}", ha="center", color=INK, fontsize=9,
+                    bbox=dict(boxstyle="round,pad=0.2", fc=SURFACE, ec="none"))
+    ax.set_xticks(x, cls_names, fontsize=8.5); ax.set_ylim(0, 1.05)
+    ax.set_title(f"Box-interval coverage (dashed = {1 - args.alpha:.0%} target)", color=INK, loc="left", fontsize=10.5)
+
+    ax = axes[1]
+    style_axes(ax)
+    ax.plot([0, 1], [0, 1], color=MUTED, linewidth=1, linestyle=(0, (4, 3)))
+    for c in range(nc):
+        d = risk_df[(risk_df["class"] == cls_names[c]) & risk_df["feasible"]]
+        if len(d):
+            ax.plot(d["target_recall"], d["test_recall"], color=SERIES[c], linewidth=2, marker="o", markersize=6,
+                    markeredgecolor=SURFACE, markeredgewidth=1.5, label=cls_names[c])
+    ax.set_xlim(0.45, 0.95); ax.set_ylim(0.3, 1.0)
+    ax.set_xlabel("Target recall (1 − α), fitted on calib", color=INK2)
+    ax.set_ylabel("Achieved recall on test", color=INK2)
+    ax.set_title("Recall-controlling thresholds (dashed = target)", color=INK, loc="left", fontsize=10.5)
+    ax.legend(frameon=False, labelcolor=INK2, fontsize=8.5, loc="lower right")
     fig.tight_layout(); fig.savefig(out / "conformal_coverage.png", dpi=160); plt.close(fig)
 
     # ---------------------------------------------------------------- 3. MC-dropout
@@ -211,7 +239,10 @@ def main():
                      conf_thr=args.deploy_conf, margins_fn=cp.margin,
                      stats=show_stats[i] if show_stats is not None else None)
 
-    (out / "uncertainty_summary.json").write_text(json.dumps(summary, indent=2, default=float))
+    summary_path = out / "uncertainty_summary.json"
+    if summary_path.exists():  # keep keys (e.g. MC-dropout results) from earlier runs not recomputed now
+        summary = json.loads(summary_path.read_text()) | summary
+    summary_path.write_text(json.dumps(summary, indent=2, default=float))
     print(calib_df.to_string(index=False), "\n")
     print(conf_df.to_string(index=False), "\n")
     print(json.dumps(summary, indent=2, default=float))
