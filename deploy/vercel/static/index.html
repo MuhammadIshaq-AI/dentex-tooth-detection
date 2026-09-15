@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dental X-ray Analysis</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --line: #e1e0d9; --accent: #2a78d6; --warn-bg: #fff4dc; --warn-ink: #6b4a00;
+    --c0: #2a78d6; --c1: #eb6834; --c2: #1baf7a; --c3: #eda100;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { color-scheme: dark; --bg: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7;
+      --line: #2c2c2a; --accent: #3987e5; --warn-bg: #2b2210; --warn-ink: #f3c96b;
+      --c0: #3987e5; --c1: #d95926; --c2: #199e70; --c3: #c98500; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  .sub { color: var(--ink-2); margin: 0 0 16px; }
+  .notice { background: var(--warn-bg); color: var(--warn-ink); border-radius: 8px; padding: 10px 14px; font-size: .9rem; margin-bottom: 20px; }
+  .grid { display: grid; grid-template-columns: 300px 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .drop { border: 2px dashed var(--line); border-radius: 10px; padding: 22px 12px; text-align: center; cursor: pointer; color: var(--ink-2); }
+  .drop.over { border-color: var(--accent); color: var(--ink); }
+  .drop strong { color: var(--ink); display: block; margin-bottom: 4px; }
+  label.row { display: flex; align-items: center; gap: 8px; margin-top: 14px; color: var(--ink-2); font-size: .92rem; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .val { font-variant-numeric: tabular-nums; color: var(--ink); margin-left: auto; }
+  button { margin-top: 16px; width: 100%; padding: 10px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  .viewer { position: relative; }
+  canvas { width: 100%; height: auto; display: block; border-radius: 8px; background: #000; }
+  .placeholder { color: var(--muted); text-align: center; padding: 80px 16px; }
+  .summary { margin: 12px 0 0; color: var(--ink-2); }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; font-size: .88rem; color: var(--ink-2); }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .table-wrap { overflow-x: auto; margin-top: 20px; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; }
+  td.num { font-variant-numeric: tabular-nums; }
+  .pill { padding: 2px 8px; border-radius: 999px; font-size: .8rem; border: 1px solid var(--line); }
+  .pill.review { background: var(--warn-bg); color: var(--warn-ink); border-color: transparent; }
+  .err { color: #d03b3b; margin-top: 10px; }
+  footer { color: var(--muted); font-size: .82rem; margin-top: 28px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Dental panoramic X-ray analysis</h1>
+  <p class="sub">Detects impacted teeth, caries, deep caries and periapical lesions with YOLO26, with calibrated confidence and 90% conformal box intervals.</p>
+  <div class="notice"><strong>Research prototype, not a medical device.</strong> Results must be reviewed by a qualified dentist. Images are processed only to produce this result.</div>
+
+  <div class="grid">
+    <section class="card">
+      <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose an X-ray image">
+        <strong>Upload panoramic X-ray</strong>
+        Drop a PNG or JPG here, or click to choose
+      </div>
+      <input type="file" id="file" accept="image/*" hidden>
+      <label class="row" for="thr">Confidence threshold <span class="val" id="thrVal">0.25</span></label>
+      <input type="range" id="thr" min="0.05" max="0.95" step="0.05" value="0.25">
+      <label class="row"><input type="checkbox" id="intervals" checked> Show 90% conformal box intervals</label>
+      <label class="row"><input type="checkbox" id="raw"> Show raw (uncalibrated) confidence</label>
+      <button id="analyze" disabled>Analyze</button>
+      <div class="err" id="err" hidden></div>
+    </section>
+
+    <section class="card">
+      <div class="viewer">
+        <div class="placeholder" id="placeholder">Upload an X-ray to see detections</div>
+        <canvas id="canvas" hidden></canvas>
+      </div>
+      <p class="summary" id="summary"></p>
+      <div class="legend" id="legend"></div>
+    </section>
+  </div>
+
+  <div class="table-wrap card" id="tableCard" hidden>
+    <table>
+      <thead><tr><th>#</th><th>Finding</th><th>Confidence</th><th>Status</th><th>Approx. region</th><th>What it means</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <footer>Model: YOLO26-s fine-tuned on DENTEX (CC BY-NC-SA 4.0). Calibration and conformal intervals fitted on a held-out split.</footer>
+</main>
+
+<script>
+const MAX_SIDE = 2048;            // downscale before upload to stay under Vercel's 4.5 MB body limit
+const CLASS_VARS = ["--c0", "--c1", "--c2", "--c3"];
+const $ = (id) => document.getElementById(id);
+let bitmap = null, blob = null, result = null;
+
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const color = (cls) => css(CLASS_VARS[cls % CLASS_VARS.length]);
+
+async function loadFile(file) {
+  $("err").hidden = true;
+  if (!file || !file.type.startsWith("image/")) return showError("Please choose an image file.");
+  const src = await createImageBitmap(file);
+  const scale = Math.min(1, MAX_SIDE / Math.max(src.width, src.height));
+  const c = new OffscreenCanvas(Math.round(src.width * scale), Math.round(src.height * scale));
+  c.getContext("2d").drawImage(src, 0, 0, c.width, c.height);
+  bitmap = await createImageBitmap(c);
+  blob = await c.convertToBlob({ type: "image/jpeg", quality: 0.92 });
+  result = null;
+  $("analyze").disabled = false;
+  $("summary").textContent = "";
+  $("tableCard").hidden = true;
+  render();
+}
+
+async function analyze() {
+  if (!blob) return;
+  $("analyze").disabled = true;
+  $("analyze").textContent = "Analyzing…";
+  $("err").hidden = true;
+  try {
+    const form = new FormData();
+    form.append("file", blob, "xray.jpg");
+    const res = await fetch("/api/predict", { method: "POST", body: form });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.detail || `Request failed (${res.status})`);
+    result = body;
+    render();
+  } catch (e) {
+    showError(e.message);
+  } finally {
+    $("analyze").disabled = false;
+    $("analyze").textContent = "Analyze";
+  }
+}
+
+function visibleFindings() {
+  if (!result) return [];
+  const thr = parseFloat($("thr").value);
+  const key = $("raw").checked ? "raw_confidence" : "confidence";
+  return result.findings.filter((f) => f[key] >= thr);
+}
+
+function render() {
+  if (!bitmap) return;
+  const canvas = $("canvas"), ctx = canvas.getContext("2d");
+  canvas.width = bitmap.width; canvas.height = bitmap.height;
+  canvas.hidden = false; $("placeholder").hidden = true;
+  ctx.drawImage(bitmap, 0, 0);
+  const findings = visibleFindings();
+  const key = $("raw").checked ? "raw_confidence" : "confidence";
+  const lw = Math.max(2, canvas.width / 700), font = Math.max(14, canvas.width / 90);
+  ctx.font = `600 ${font}px system-ui, sans-serif`;
+  const placed = [];
+  findings.forEach((f, i) => {
+    const [x1, y1, x2, y2] = f.box, col = color(f.class_id);
+    if ($("intervals").checked && f.interval_outer) {
+      const [ox1, oy1, ox2, oy2] = f.interval_outer;
+      ctx.setLineDash([lw * 3, lw * 2]); ctx.lineWidth = Math.max(1, lw / 2); ctx.strokeStyle = col;
+      ctx.strokeRect(ox1, oy1, ox2 - ox1, oy2 - oy1); ctx.setLineDash([]);
+    }
+    ctx.lineWidth = lw; ctx.strokeStyle = col; ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+    const text = `${i + 1}. ${f.name} ${f[key].toFixed(2)}`;
+    const tw = ctx.measureText(text).width + 10, th = font + 8;
+    let ty = Math.max(0, y1 - th);
+    while (placed.some((p) => x1 < p.x + p.w && p.x < x1 + tw && ty < p.y + p.h && p.y < ty + th)) ty += th + 2;
+    placed.push({ x: x1, y: ty, w: tw, h: th });
+    ctx.fillStyle = col; ctx.fillRect(x1, ty, tw, th);
+    ctx.fillStyle = "#0b0b0b"; ctx.fillText(text, x1 + 5, ty + font);
+  });
+  if (!result) return;
+  const review = findings.filter((f) => f.status.startsWith("Uncertain")).length;
+  $("summary").textContent = `${findings.length} finding(s) at confidence ≥ ${parseFloat($("thr").value).toFixed(2)}` +
+    (review ? ` · ${review} flagged for review` : "") + ` · server inference ${result.inference_ms} ms`;
+  const names = [...new Map(result.findings.map((f) => [f.class_id, f.name])).entries()].sort((a, b) => a[0] - b[0]);
+  $("legend").innerHTML = names.map(([id, n]) => `<span><span class="dot" style="background:${color(id)}"></span>${n}</span>`).join("");
+  $("rows").innerHTML = findings.map((f, i) => `<tr>
+      <td class="num">${i + 1}</td><td><span class="dot" style="background:${color(f.class_id)}"></span>${f.name}</td>
+      <td class="num">${f[key].toFixed(3)}</td>
+      <td><span class="pill ${f.status.startsWith("Uncertain") ? "review" : ""}">${f.status}</span></td>
+      <td>${f.region}</td><td>${f.description}</td></tr>`).join("");
+  $("tableCard").hidden = findings.length === 0;
+}
+
+function showError(msg) { $("err").textContent = msg; $("err").hidden = false; }
+
+const drop = $("drop");
+drop.addEventListener("click", () => $("file").click());
+drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") $("file").click(); });
+drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); loadFile(e.dataTransfer.files[0]); });
+$("file").addEventListener("change", (e) => loadFile(e.target.files[0]));
+$("analyze").addEventListener("click", analyze);
+$("thr").addEventListener("input", () => { $("thrVal").textContent = parseFloat($("thr").value).toFixed(2); render(); });
+$("intervals").addEventListener("change", render);
+$("raw").addEventListener("change", render);
+</script>
+</body>
+</html>

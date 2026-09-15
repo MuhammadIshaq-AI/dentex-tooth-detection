@@ -1,0 +1,26 @@
+# data & weights
+data/
+runs/
+*.pt
+*.onnx
+!deploy/vercel/model/*.onnx
+*.engine
+*.cache
+*.log
+# full Ultralytics val outputs; curated plots are copied to results/
+results/val_runs/
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+.venv/
+.env
+
+# os / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
