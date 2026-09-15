@@ -80,10 +80,14 @@ def convert_split(json_path, img_dir, out_root, split, image_ids=None, sidecar_r
 
 
 # The released DENTEX test labels are per-image LabelMe polygons labelled "<code>-<turkish name>-<FDI>"
-# using a wider clinical vocabulary. Only the four challenge diagnoses are kept; the rest
-# (0 saglam/healthy, 3 kanal/root canal, 5 cekim/extraction, 8 kirik/fracture) are dropped.
-# "2-kuretaj" (curettage) is the treatment for deep caries and matches its class frequency.
-LABELME_CODE_TO_DIAGNOSIS = {1: "Caries", 2: "Deep Caries", 6: "Impacted", 7: "Periapical Lesion"}
+# using treatment-planning codes rather than the four challenge diagnoses. The mapping below
+# follows scripts/audit_test_labels.py (code x baseline-prediction agreement, results/test_label_audit.csv):
+#   6 gomulu (impacted) -> Impacted            92% predicted Impacted
+#   1 curuk (caries) -> Caries                 43% Caries vs 6% Deep Caries
+#   7 lezyon (lesion) -> Periapical Lesion     36% Periapical Lesion
+#   3 kanal (root canal), 5 cekim (extraction) -> Deep Caries   49% / 66% Deep Caries
+# Dropped: 0 saglam (healthy), 2 kuretaj (periodontal curettage, 92% undetected), 8 kirik (fracture).
+LABELME_CODE_TO_DIAGNOSIS = {1: "Caries", 3: "Deep Caries", 5: "Deep Caries", 6: "Impacted", 7: "Periapical Lesion"}
 
 
 def parse_labelme_label(label: str):

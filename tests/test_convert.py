@@ -54,8 +54,8 @@ def test_labelme_conversion_maps_and_drops_codes(tmp_path):
     Image.new("L", (200, 100)).save(tmp_path / "input" / "t_1.png")
     shapes = [
         {"label": "1-çürük-15", "points": [[10, 10], [60, 10], [60, 50], [10, 50]], "shape_type": "polygon"},
-        {"label": "2-küretaj-36", "points": [[100, 20], [140, 20], [120, 90]], "shape_type": "polygon"},
-        {"label": "3-kanal-11", "points": [[0, 0], [5, 0], [5, 5]], "shape_type": "polygon"},
+        {"label": "3-kanal-36", "points": [[100, 20], [140, 20], [120, 90]], "shape_type": "polygon"},
+        {"label": "2-küretaj-11", "points": [[0, 0], [5, 0], [5, 5]], "shape_type": "polygon"},
     ]
     (tmp_path / "label" / "t_1.json").write_text(json.dumps(
         {"shapes": shapes, "imagePath": "t_1.png", "imageWidth": 200, "imageHeight": 100}), encoding="utf-8")
