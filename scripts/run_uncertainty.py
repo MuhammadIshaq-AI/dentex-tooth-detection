@@ -234,12 +234,12 @@ def main():
         summary["baseline_ap50_mean"] = float(ap_df["mean"].iloc[0])
 
     # ---------------------------------------------------------------- examples
-    show_pred, show_stats = (mc_pred, mc_stats) if mc_stats is not None else (test_pred, None)
+    # draw baseline predictions: conformal margins were fitted on them, and MC-fused scores sit on a lower scale
+    # that would hide most boxes at the deployment threshold
     for rank, i in enumerate(pick_examples(test_gt, test_pred, conf_thr=args.deploy_conf)):
-        side_by_side(test_paths[i], test_gt[i], show_pred[i], names,
+        side_by_side(test_paths[i], test_gt[i], test_pred[i], names,
                      Path(args.examples) / f"{rank:02d}_{test_paths[i].stem}.jpg",
-                     conf_thr=args.deploy_conf, margins_fn=cp.margin,
-                     stats=show_stats[i] if show_stats is not None else None)
+                     conf_thr=args.deploy_conf, margins_fn=cp.margin)
 
     summary_path = out / "uncertainty_summary.json"
     if summary_path.exists():  # keep keys (e.g. MC-dropout results) from earlier runs not recomputed now
