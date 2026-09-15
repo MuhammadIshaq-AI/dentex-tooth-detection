@@ -130,7 +130,38 @@ improvements: higher resolution or tiling for small lesions, and tooth-level cro
 
 #### 4. MC-dropout
 
-<!-- MC_RESULTS -->
+A dropout-augmented copy of the model (fine-tuned 30 epochs; validation mAP50 0.61 vs 0.62 baseline) is sampled T = 20 times
+per image, and the stochastic detections are fused.
+
+**Accuracy (AP50 on test, own matching code):**
+
+| Model | Impacted | Caries | Periapical Lesion | Deep Caries | Mean |
+|---|---:|---:|---:|---:|---:|
+| Baseline (single pass) | 0.924 | 0.463 | 0.405 | 0.397 | **0.547** |
+| Dropout model, single pass | 0.912 | 0.433 | 0.438 | 0.344 | 0.532 |
+| MC-dropout, T = 20 fused | 0.879 | 0.384 | 0.397 | 0.325 | 0.496 |
+
+**Does uncertainty flag false positives?** (AUROC over test detections with conf ≥ 0.05; 0.5 = chance)
+
+| Signal | AUROC |
+|---|---:|
+| Baseline: 1 − confidence | 0.767 |
+| MC-dropout: 1 − mean confidence | **0.818** |
+| MC-dropout: 1 − detection frequency | 0.720 |
+| MC-dropout: box std | 0.644 |
+| MC-dropout: class entropy | 0.517 |
+| MC-dropout: predictive entropy (incl. background) | 0.240 (inverted) |
+
+**Takeaways.**
+- **Better at flagging errors:** averaging over 20 stochastic passes ranks false positives better than a single pass (AUROC
+  0.818 vs 0.767). Detections that appear in only some passes are more likely to be wrong.
+- **But less accurate:** fusing the passes lowers AP50 (0.496 vs 0.547), so MC-dropout is best used as a *review flag* on top of baseline
+  detections, which is what the apps do, not as the detector itself.
+- **Entropy signals:**
+  - Predictive entropy that includes the background share is *inverted* (0.24). Weak false positives are dominated by
+    background mass and look "certain".
+  - Class entropy (disagreement over which diagnosis) is near chance for spotting false positives. It is still useful for
+    flagging diagnosis ambiguity such as Caries vs Deep Caries.
 
 ---
 
