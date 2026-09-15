@@ -1,0 +1,13 @@
+# Install CUDA torch first:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+ultralytics>=8.4.0
+huggingface_hub>=0.24
+pycocotools
+numpy
+pandas
+matplotlib
+opencv-python
+scikit-learn
+tqdm
+pyyaml
+pytest

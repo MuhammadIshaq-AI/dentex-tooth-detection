@@ -1,0 +1,27 @@
+# Short fine-tune of the baseline with Dropout2d inserted before the detection-head output
+# convs, so MC-dropout sampling at inference matches what the model saw in training.
+model: runs/dentex/yolo26s_baseline/weights/best.pt
+mc_dropout: 0.1
+data: data/yolo/dentex.yaml
+imgsz: 1024
+epochs: 30
+patience: 15
+batch: 4
+lr0: 0.002
+warmup_epochs: 1
+cos_lr: true
+amp: true
+workers: 4
+cache: disk
+seed: 0
+fliplr: 0.5
+mosaic: 1.0
+close_mosaic: 10
+degrees: 3.0
+translate: 0.1
+scale: 0.3
+hsv_h: 0.0
+hsv_s: 0.0
+hsv_v: 0.3
+project: runs/dentex
+name: yolo26s_mcdropout

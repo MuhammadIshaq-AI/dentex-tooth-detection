@@ -1,0 +1,24 @@
+# Baseline YOLO26 training config, sized for a 6 GB laptop GPU (RTX 3050).
+model: yolo26s.pt
+data: data/yolo/dentex.yaml   # written by scripts/prepare_data.py
+imgsz: 1024
+epochs: 150
+patience: 30
+batch: 4            # set -1 for AutoBatch
+cos_lr: true
+amp: true
+workers: 4
+cache: disk
+seed: 0
+# augmentation: horizontal flip is safe because classes are diagnoses, not tooth numbers
+fliplr: 0.5
+mosaic: 1.0
+close_mosaic: 15
+degrees: 3.0
+translate: 0.1
+scale: 0.3
+hsv_h: 0.0          # grayscale X-rays
+hsv_s: 0.0
+hsv_v: 0.3
+project: runs/dentex
+name: yolo26s_baseline
