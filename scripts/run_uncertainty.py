@@ -209,14 +209,16 @@ def main():
         ap_df.to_csv(out / "uncertainty_mc_ap50.csv")
 
         # does uncertainty flag false positives? AUROC over detections with conf >= floor
-        rows, fp_flags, feats = [], [], {k: [] for k in ("1 - confidence", "entropy", "1 - frequency", "box std")}
+        signals = ("1 - confidence", "predictive entropy (incl. background)", "class entropy", "1 - frequency", "box std")
+        rows, fp_flags, feats = [], [], {k: [] for k in signals}
         for p, s, g in zip(mc_pred, mc_stats, test_gt):
             keep = p.conf >= args.conf_floor
             q = filt(p, keep)
             p2g, _ = match_detections(q.xyxy, q.conf, q.cls, g.xyxy, g.cls)
             fp_flags += list(p2g < 0)
             feats["1 - confidence"] += list(1 - q.conf)
-            feats["entropy"] += list(s["entropy"][keep])
+            feats["predictive entropy (incl. background)"] += list(s["entropy"][keep])
+            feats["class entropy"] += list(s["class_entropy"][keep])
             feats["1 - frequency"] += list(1 - s["freq"][keep])
             feats["box std"] += list(s["box_std"][keep])
         base_fp, base_u = [], []

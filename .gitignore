@@ -3,6 +3,7 @@ data/
 runs/
 *.pt
 *.onnx
+!deploy/vercel/model/*.onnx
 *.engine
 *.cache
 *.log

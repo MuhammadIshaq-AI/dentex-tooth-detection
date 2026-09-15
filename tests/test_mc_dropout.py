@@ -88,3 +88,22 @@ def test_average_precision_known_case():
 
 def test_mcdropout_is_dropout2d():
     assert issubclass(MCDropout2d, nn.Dropout2d)
+
+
+def test_class_entropy_measures_diagnosis_disagreement():
+    box = np.array([[10, 10, 50, 50]], float)
+    agree = [Boxes(box, np.array([1]), np.array([0.3])) for _ in range(4)]  # weak but consistent class
+    split = [Boxes(box, np.array([t % 2]), np.array([0.9])) for t in range(4)]  # strong but flips class
+    _, s_agree = fuse_passes(agree, num_classes=4)
+    _, s_split = fuse_passes(split, num_classes=4)
+    assert np.isclose(s_agree["class_entropy"][0], 0.0)
+    assert np.isclose(s_split["class_entropy"][0], 0.5)  # two of four classes equally likely -> log2/log4
+
+    # why class_entropy exists: a weak, consistent false positive is dominated by background mass, so the
+    # background-inclusive entropy calls it *less* uncertain than a strong true positive
+    weak = [Boxes(box, np.array([2]), np.array([0.05])) for _ in range(4)]
+    strong = [Boxes(box, np.array([2]), np.array([0.6])) for _ in range(4)]
+    _, s_weak = fuse_passes(weak, num_classes=4)
+    _, s_strong = fuse_passes(strong, num_classes=4)
+    assert s_weak["entropy"][0] < s_strong["entropy"][0]
+    assert s_weak["class_entropy"][0] == s_strong["class_entropy"][0] == 0.0

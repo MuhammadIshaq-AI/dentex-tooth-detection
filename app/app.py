@@ -101,7 +101,7 @@ class Engine:
                 best = iou.argmax(1)
                 ok = iou[np.arange(n), best] >= 0.5
                 stats["freq"][ok] = fused_stats["freq"][best[ok]]
-                stats["entropy"][ok] = fused_stats["entropy"][best[ok]]
+                stats["entropy"][ok] = fused_stats["class_entropy"][best[ok]]  # diagnosis disagreement
                 stats["mc_cls"][ok] = fused.cls[best[ok]]
                 stats["agree"] = ok & (stats["mc_cls"] == boxes.cls)
             mode += f"; MC-dropout uncertainty from {int(mc_passes)} stochastic passes"
@@ -128,7 +128,7 @@ class Engine:
             if shown_stats is not None:
                 mc_cls = int(shown_stats["mc_cls"][i])
                 row["Seen in % of passes"] = round(100 * float(shown_stats["freq"][i]))
-                row["Entropy (0-1)"] = round(float(shown_stats["entropy"][i]), 3)
+                row["Class entropy (0-1)"] = round(float(shown_stats["entropy"][i]), 3)
                 row["MC class"] = self.names[mc_cls] if mc_cls >= 0 else "not detected"
                 row["Status"] = status_from_mc(float(s), float(shown_stats["freq"][i]),
                                                float(shown_stats["entropy"][i]), bool(shown_stats["agree"][i]))

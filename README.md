@@ -184,6 +184,45 @@ python scripts/run_uncertainty.py \
 pytest
 ```
 
+## Try it
+
+### Where the data is
+
+After `download_data.py` and `prepare_data.py`:
+
+| Path | Contents |
+|---|---|
+| `data/raw/` | original DENTEX zips and extracted folders |
+| `data/yolo/images/{train,calib,val,test}/` | converted images per split (labels in `data/yolo/labels/`) |
+| `data/yolo/dentex.yaml` | Ultralytics dataset config |
+| `data/yolo/images/test/*.png` | 250 unseen panoramic X-rays, good for trying the app |
+
+### Local web app (Gradio, uses your GPU)
+
+```bash
+python app/app.py        # open http://127.0.0.1:7860
+```
+
+Upload a panoramic X-ray, or pick a test-set example. The app returns:
+- the annotated image
+- a findings table: diagnosis, calibrated confidence, approximate FDI quadrant, status, 90% conformal box interval
+- a plain-language summary
+
+Turn on **MC-dropout** to add detection frequency and diagnosis entropy across stochastic passes. It also flags
+findings where the dropout model disagrees on the diagnosis.
+
+### Deploy to Vercel
+
+Vercel can't host PyTorch (the Python function bundle limit is 500 MB and there's no GPU), so `deploy/vercel/` contains a torch-free
+build: FastAPI + ONNX Runtime with the same preprocessing, calibration and conformal intervals, plus a static upload page.
+
+```bash
+python scripts/export_onnx.py      # writes deploy/vercel/model/{dentex_yolo26s.onnx, meta.json}
+cd deploy/vercel && vercel --prod  # or import the repo in Vercel with Root Directory = deploy/vercel
+```
+
+See [`deploy/vercel/README.md`](deploy/vercel/README.md) for details.
+
 ## Repository layout
 ```
 configs/            training configs (baseline, MC-dropout fine-tune)

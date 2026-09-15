@@ -110,7 +110,7 @@ def fuse_passes(dets: list[Boxes], iou_thr=0.5, num_classes=4):
     T = len(dets)
     boxes = np.concatenate([d.xyxy for d in dets]) if T else np.zeros((0, 4))
     if len(boxes) == 0:
-        return Boxes.empty(with_conf=True), {k: np.zeros(0) for k in ("freq", "entropy", "box_std")}
+        return Boxes.empty(with_conf=True), {k: np.zeros(0) for k in ("freq", "entropy", "class_entropy", "box_std")}
     scores = np.concatenate([d.conf for d in dets])
     classes = np.concatenate([d.cls for d in dets])
     pass_id = np.concatenate([np.full(len(d.xyxy), t) for t, d in enumerate(dets)])
@@ -130,7 +130,7 @@ def fuse_passes(dets: list[Boxes], iou_thr=0.5, num_classes=4):
         assigned[members] = True
         clusters.append(members)
 
-    xyxy, cls, conf, freq, ent, bstd = [], [], [], [], [], []
+    xyxy, cls, conf, freq, ent, cent, bstd = [], [], [], [], [], [], []
     for m in clusters:
         w = scores[m] / scores[m].sum()
         mean_box = (boxes[m] * w[:, None]).sum(0)
@@ -138,12 +138,18 @@ def fuse_passes(dets: list[Boxes], iou_thr=0.5, num_classes=4):
         dist = np.append(class_mass, max(0.0, 1 - class_mass.sum()))
         dist = dist / dist.sum()
         nz = dist[dist > 0]
+        # class_entropy: disagreement about *which* diagnosis, ignoring the background share (a weak detection
+        # is dominated by background mass and would otherwise look low-entropy)
+        fg = class_mass / max(class_mass.sum(), 1e-12)
+        nzf = fg[fg > 0]
         size = np.maximum(mean_box[2:] - mean_box[:2], 1e-6)
         xyxy.append(mean_box)
         cls.append(int(np.argmax(class_mass)))
         conf.append(float(class_mass.max()))
         freq.append(len(m) / T)
         ent.append(float(-(nz * np.log(nz)).sum() / np.log(len(dist))))
+        cent.append(float(-(nzf * np.log(nzf)).sum() / np.log(num_classes)) if num_classes > 1 else 0.0)
         bstd.append(float((boxes[m].std(0) / np.tile(size, 2)).mean()) if len(m) > 1 else 1.0)
     fused = Boxes(np.array(xyxy), np.array(cls), np.array(conf))
-    return fused, {"freq": np.array(freq), "entropy": np.array(ent), "box_std": np.array(bstd)}
+    return fused, {"freq": np.array(freq), "entropy": np.array(ent), "class_entropy": np.array(cent),
+                   "box_std": np.array(bstd)}
