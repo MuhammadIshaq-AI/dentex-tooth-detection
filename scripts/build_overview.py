@@ -177,9 +177,11 @@ def build(root: Path, out: Path, author: str):
 
     doc.add_heading("6. Try it", level=1)
     bullets(doc, [
+        ("Live app (no installation needed): ", "https://dentex-tooth-detection.vercel.app/. Open the link, upload a "
+                                                "panoramic X-ray and click Analyze to see the findings, confidence and "
+                                                "error ranges."),
         ("Local web app: ", "conda activate dentex, then python app/app.py, and open http://127.0.0.1:7860. Upload an "
-                            "X-ray (examples in data/yolo/images/test/)."),
-        ("Online: ", "deploy the deploy/vercel folder to Vercel (set Root Directory to deploy/vercel)."),
+                            "X-ray (examples in data/yolo/images/test/). Includes the MC-dropout option."),
         ("Code and full technical report: ", "github.com/MuhammadIshaq-AI/dentex-tooth-detection, "
                                              "docs/DENTEX_Project_Report.docx."),
     ])

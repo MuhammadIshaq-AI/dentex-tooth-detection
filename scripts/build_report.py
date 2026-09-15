@@ -328,6 +328,9 @@ def build(root: Path, out: Path, author: str):
     figure(doc, root / "docs/figures/app_output_mc.jpg",
            "Figure 10. App output with MC-dropout enabled; H is the class entropy of each finding.", width=6.0)
     doc.add_heading("7.2 Serverless deployment (Vercel)", level=2)
+    para(doc, "https://dentex-tooth-detection.vercel.app/. Anyone can open the link, upload a panoramic X-ray and "
+              "get the findings with calibrated confidence and 90% conformal box intervals, with nothing to install.",
+         bold_lead="Live app: ")
     bullets(doc, [
         "PyTorch cannot run on Vercel (500 MB function limit, no GPU), so the model was exported to ONNX (39 MB) and served "
         "by a FastAPI function with ONNX Runtime, plus a static upload page.",

@@ -1,5 +1,7 @@
 # Vercel deployment
 
+**Live:** https://dentex-tooth-detection.vercel.app/
+
 A lightweight, torch-free version of the detector for Vercel:
 
 - `app.py`: FastAPI entrypoint (Vercel zero-config Python runtime). Serves the upload page at `/` and the JSON API at

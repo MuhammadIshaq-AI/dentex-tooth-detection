@@ -10,7 +10,8 @@ guarantees, and MC-dropout uncertainty**. It ships with a local web app and a Ve
 |---|---|
 | Detector | YOLO26-s, 1024 px, trained locally on an RTX 3050 Laptop (6 GB) |
 | Uncertainty | Platt calibration · split-conformal box intervals · recall-controlling conformal thresholds · MC-dropout |
-| Try it | Gradio app (`python app/app.py`) · Vercel deployment (`deploy/vercel/`, FastAPI + ONNX Runtime) |
+| **Live demo** | **https://dentex-tooth-detection.vercel.app/** (upload a panoramic X-ray, get findings) |
+| Try it locally | Gradio app (`python app/app.py`) · Vercel deployment (`deploy/vercel/`, FastAPI + ONNX Runtime) |
 
 **Contents:** [Results](#results) · [Uncertainty](#uncertainty) · [Try it](#try-it) · [Method](#method) ·
 [Reproduce](#reproduce) · [Repository layout](#repository-layout) · [Limitations](#limitations)
