@@ -171,8 +171,8 @@ def main():
     ax.bar(x, vals, width=0.6, color=SERIES[:nc], edgecolor=SURFACE, linewidth=2)
     ax.axhline(1 - args.alpha, color=INK2, linewidth=1, linestyle=(0, (4, 3)))
     for xi, v in zip(x, vals):
-        if np.isfinite(v):  # label inside the bar, clear of the target line
-            ax.text(xi, v - 0.06, f"{v:.0%}", ha="center", color=INK, fontsize=9,
+        if np.isfinite(v):  # label near the bar base, well clear of the target line
+            ax.text(xi, 0.06, f"{v:.0%}", ha="center", color=INK, fontsize=9,
                     bbox=dict(boxstyle="round,pad=0.2", fc=SURFACE, ec="none"))
     ax.set_xticks(x, cls_names, fontsize=8.5); ax.set_ylim(0, 1.05)
     ax.set_title(f"Box-interval coverage (dashed = {1 - args.alpha:.0%} target)", color=INK, loc="left", fontsize=10.5)

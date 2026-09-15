@@ -55,6 +55,57 @@ Top: ground truth. Bottom: prediction, with the thin outer box showing the 90% c
 |---|---|
 | ![reliability](results/reliability_diagram.png) | ![coverage](results/conformal_coverage.png) |
 
+All uncertainty components are **fitted on the 100-image `calib` split** (never trained on) and **evaluated on test**.
+
+#### 1. Confidence calibration: per-class Platt scaling
+
+Expected calibration error of detections (conf ≥ 0.05; "correct" = matched at IoU ≥ 0.5):
+
+| Class | Detections | ECE raw | ECE calibrated |
+|---|---:|---:|---:|
+| Impacted | 272 | 0.164 | 0.103 |
+| Caries | 1448 | 0.081 | 0.032 |
+| Periapical Lesion | 112 | 0.117 | 0.099 |
+| Deep Caries | 318 | 0.108 | 0.093 |
+| **All** | **2150** | **0.070** | **0.037** |
+
+Calibration **halves the ECE**. The raw model is over-confident at the top end: detections scored ~0.9 are right only ~67% of the time, which Platt scaling corrects.
+
+#### 2. Conformal box intervals (α = 0.1)
+
+Each detection gets an inner/outer box expanded by `q × box size`. Split-conformal theory says the true box
+lies between them for ≥ 90% of detected lesions.
+
+| Class | Margin q | Test coverage | Matched boxes |
+|---|---:|---:|---:|
+| Impacted | 0.16 | 88.2% | 212 |
+| Caries | 0.14 | 92.9% | 504 |
+| Periapical Lesion | 0.63 | 100% | 36 |
+| Deep Caries | 0.24 | 96.5% | 115 |
+
+Coverage holds within sampling error even though test labels come from a different annotation protocol. Box
+uncertainty is largest for periapical lesions, which have diffuse boundaries.
+
+#### 3. Recall-controlling thresholds: "miss at most α of lesions"
+
+A per-class confidence threshold fitted so that ≥ 1 − α of calib lesions are kept. This is only **feasible** when the
+detector finds at least that many lesions at all (its recall ceiling, measured on calib at conf ≥ 0.05, IoU ≥ 0.5):
+
+| Class | Calib recall ceiling | α = 0.1 (target 90%) | α = 0.5 (target 50%) | Fixed conf 0.25 |
+|---|---:|---|---|---|
+| Impacted | 95.4% | thr 0.40 → **recall 88.7%, precision 87.1%** | thr 0.75 → recall 48.0%, precision 93.8% | recall 91.4%, precision 85.6% |
+| Caries | 66.3% | infeasible | thr 0.17 → recall 50.2%, precision 47.1% | recall 43.0%, precision 50.3% |
+| Periapical Lesion | 54.2% | infeasible | thr 0.07 → recall 42.7%, precision 35.6% | recall 37.3%, precision 54.9% |
+| Deep Caries | 55.2% | infeasible | thr 0.26 → recall 54.2%, precision 51.5% | recall 55.3%, precision 51.0% |
+
+**Takeaway.** The conformal analysis makes explicit what a fixed 0.25 threshold hides. For impacted teeth you can
+promise "≤ 10% missed" at 87% precision. For caries and lesions, **no threshold can deliver 90% sensitivity with this
+detector**, because about a third or more of those lesions are never localised at IoU ≥ 0.5. That points to the next
+improvements: higher resolution or tiling for small lesions, and tooth-level crops. Periapical lesions fall short even at α = 0.5
+(42.7% vs 50%). With only 24 calib instances the finite-sample guarantee is loose, and the test protocol shift matters more.
+
+#### 4. MC-dropout
+
 _Pending._
 
 ---
