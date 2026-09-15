@@ -6,6 +6,8 @@ runs/
 *.engine
 *.cache
 *.log
+# full Ultralytics val outputs; curated plots are copied to results/
+results/val_runs/
 
 # python
 __pycache__/
