@@ -57,6 +57,8 @@ def dropout_training_callback(p: float):
     """Ultralytics ``on_pretrain_routine_end`` callback: inject into both model and EMA."""
 
     def cb(trainer):
+        if has_dropout(trainer.model):  # resumed from a checkpoint that already carries dropout
+            return
         n = inject_dropout(trainer.model, p)
         if getattr(trainer, "ema", None) is not None:
             inject_dropout(trainer.ema.ema, p)
