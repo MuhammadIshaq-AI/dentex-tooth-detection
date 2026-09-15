@@ -1,0 +1,7 @@
+model,signal,AUROC_false_positive
+baseline,1 - confidence,0.767227545733804
+mc_dropout_T20,1 - confidence,0.818027998148355
+mc_dropout_T20,predictive entropy (incl. background),0.24008902489915146
+mc_dropout_T20,class entropy,0.5167506975973463
+mc_dropout_T20,1 - frequency,0.7195362222338774
+mc_dropout_T20,box std,0.6437346978953121

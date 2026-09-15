@@ -4,14 +4,16 @@
 Fine-tunes Ultralytics **YOLO26** (the latest YOLO release) on the
 [DENTEX](https://huggingface.co/datasets/ibrahimhamamci/DENTEX) diagnosis set. It then adds
 what most public dental-detection repos don't have: **calibrated confidence, conformal
-guarantees, and MC-dropout uncertainty**.
+guarantees, and MC-dropout uncertainty**. It ships with a local web app and a Vercel deployment.
 
 | Diagnosis classes | Impacted · Caries · Periapical Lesion · Deep Caries |
 |---|---|
 | Detector | YOLO26-s, 1024 px, trained locally on an RTX 3050 Laptop (6 GB) |
 | Uncertainty | Platt calibration · split-conformal box intervals · recall-controlling conformal thresholds · MC-dropout |
+| Try it | Gradio app (`python app/app.py`) · Vercel deployment (`deploy/vercel/`, FastAPI + ONNX Runtime) |
 
-> Results tables and example images below are filled in by the pipeline (`results/`, `assets/examples/`).
+**Contents:** [Results](#results) · [Uncertainty](#uncertainty) · [Try it](#try-it) · [Method](#method) ·
+[Reproduce](#reproduce) · [Repository layout](#repository-layout) · [Limitations](#limitations)
 
 ---
 
@@ -41,7 +43,7 @@ YOLO26-s, 1024 px, best epoch 43 of 73 (early stopping, patience 30). Trained in
 | Deep Caries | 0.491 | 0.532 | 0.434 | 0.271 |
 | **All** | **0.602** | **0.565** | **0.569** | **0.364** |
 
-Inference: ~8 ms per image at 1024 px on the laptop GPU.
+Inference: ~8 ms per image at 1024 px on the laptop GPU; ~0.2–0.5 s per image on CPU with ONNX Runtime.
 
 #### Where the errors are
 
@@ -59,11 +61,19 @@ Validation-set versions: [PR curve](results/pr_curve_val.png) · [confusion matr
 
 ### Example outputs
 
-Top: ground truth. Bottom: prediction, with the thin outer box showing the 90% conformal box interval.
+Test-set images the model never saw. Top: ground truth. Bottom: prediction (conf ≥ 0.25), with thin outer boxes
+showing the 90% conformal box interval.
 
-<!-- assets/examples/*.jpg -->
+| Among the best (per-image F1) | Among the worst |
+|---|---|
+| ![best](assets/examples/00_test_64.jpg) | ![worst](assets/examples/04_test_126.jpg) |
 
-### Uncertainty
+More: [01](assets/examples/01_test_230.jpg) · [02](assets/examples/02_test_197.jpg) ·
+[03](assets/examples/03_test_121.jpg) · [05](assets/examples/05_test_127.jpg).
+
+---
+
+## Uncertainty
 
 | | |
 |---|---|
@@ -120,7 +130,58 @@ improvements: higher resolution or tiling for small lesions, and tooth-level cro
 
 #### 4. MC-dropout
 
-_Pending._
+<!-- MC_RESULTS -->
+
+---
+
+## Try it
+
+### Where the data is
+
+After `download_data.py` and `prepare_data.py`:
+
+| Path | Contents |
+|---|---|
+| `data/raw/` | original DENTEX zips and extracted folders |
+| `data/yolo/images/{train,calib,val,test}/` | converted images per split (labels in `data/yolo/labels/`) |
+| `data/yolo/dentex.yaml` | Ultralytics dataset config |
+| `data/yolo/images/test/*.png` | 250 unseen panoramic X-rays, good for trying the apps |
+
+### Local web app (Gradio, uses your GPU)
+
+```bash
+python app/app.py        # open http://127.0.0.1:7860
+```
+
+Upload a panoramic X-ray, or pick a test-set example. The app returns:
+- the annotated image
+- a findings table: diagnosis, calibrated confidence, approximate FDI quadrant, status, 90% conformal box interval
+- a plain-language summary of each finding
+
+Turn on **MC-dropout** to add, for each finding:
+- how often it appears across stochastic passes
+- its diagnosis (class) entropy
+- the dropout model's class
+
+Findings where the two models disagree on the diagnosis are flagged for review.
+
+### Deploy to Vercel
+
+Vercel can't host PyTorch (the Python function bundle limit is 500 MB and there's no GPU), so `deploy/vercel/` contains a torch-free
+build: FastAPI + ONNX Runtime plus a static upload page.
+- Preprocessing matches Ultralytics exactly. On 10 test images, 93 of 93 boxes match at IoU ≥ 0.9, with a max confidence difference of 0.001.
+- Platt calibration and conformal intervals therefore carry over unchanged.
+- The page downsizes images in the browser to stay under Vercel's 4.5 MB request limit.
+- MC-dropout is local-only; 20 CPU passes per request would be too slow.
+
+```bash
+python scripts/export_onnx.py      # writes deploy/vercel/model/{dentex_yolo26s.onnx, meta.json}
+cd deploy/vercel && vercel --prod  # or import the repo in Vercel with Root Directory = deploy/vercel
+```
+
+Test it locally with `pip install -r deploy/vercel/requirements.txt uvicorn`, then `cd deploy/vercel && uvicorn app:app`
+(open http://127.0.0.1:8000). API: `POST /api/predict` (multipart `file`), `GET /api/health`, docs at `/api/docs`.
+See [`deploy/vercel/README.md`](deploy/vercel/README.md).
 
 ---
 
@@ -128,7 +189,7 @@ _Pending._
 
 ### Data
 - **train / calib**: the 705 fully-annotated DENTEX training images, split (stratified by rarest class) into
-  ~605 for training and **100 held out for calibration**. Calibration images are never trained on.
+  605 for training and **100 held out for calibration**. Calibration images are never trained on.
 - **val**: official 50-image validation set (model selection).
 - **test**: official 250-image test set. Its labels are released as LabelMe polygons with Turkish
   **treatment-planning codes**, not the four challenge diagnoses. They are converted to boxes and mapped using the audit below.
@@ -159,10 +220,18 @@ test numbers for that class as optimistic. The validation set, which uses the or
    The finite-sample (1−α) quantile per class gives inner/outer boxes that contain the true box for ≥ 90% of
    detected lesions (exchangeability assumption).
 3. **Recall-controlling thresholds.** Per class, the confidence threshold that misses ≤ α of lesions on `calib`
-   (with finite-sample correction), e.g. *"at most 10% of caries missed"*. This replaces an arbitrary 0.25 cut-off.
-4. **MC-dropout.** YOLO26 has no dropout, so `Dropout2d(p=0.1)` is inserted before every head output conv and the model is
-   briefly fine-tuned with it. At inference, T=20 stochastic passes are clustered into detections with mean score,
-   detection frequency, predictive entropy and box std. Reported as AUROC for flagging false positives.
+   (with finite-sample correction), e.g. *"at most 10% of caries missed"*. Reported as infeasible when the detector's recall
+   ceiling is below the target.
+4. **MC-dropout.** YOLO26 has no dropout, so `Dropout2d(p=0.1)` is inserted before all 12 detection-head output convs and the
+   model is fine-tuned for 30 epochs with it. At inference, T=20 stochastic passes are clustered, class-agnostically, into
+   detections with:
+   - mean score
+   - detection frequency
+   - predictive entropy (including background)
+   - **class entropy** (disagreement over the four diagnoses)
+   - box std
+
+   Each signal is scored by its AUROC for flagging false positives.
 
 ---
 
@@ -176,68 +245,40 @@ pip install -r requirements.txt && pip install -e .
 python scripts/download_data.py                 # ~12 GB from Hugging Face
 python scripts/prepare_data.py                  # -> data/yolo (train/calib/val/test)
 python -m dentex.train --config configs/train.yaml
+python -m dentex.evaluate --weights runs/dentex/yolo26s_baseline/weights/best.pt --split val
 python -m dentex.evaluate --weights runs/dentex/yolo26s_baseline/weights/best.pt --split test
+python scripts/audit_test_labels.py --weights runs/dentex/yolo26s_baseline/weights/best.pt
 python -m dentex.train --config configs/train_mcdropout.yaml
 python scripts/run_uncertainty.py \
     --weights runs/dentex/yolo26s_baseline/weights/best.pt \
     --mc-weights runs/dentex/yolo26s_mcdropout/weights/best.pt
-pytest
+python scripts/export_onnx.py                   # model for deploy/vercel
+pytest                                          # 17 unit tests
+python app/app.py                               # local web app
 ```
-
-## Try it
-
-### Where the data is
-
-After `download_data.py` and `prepare_data.py`:
-
-| Path | Contents |
-|---|---|
-| `data/raw/` | original DENTEX zips and extracted folders |
-| `data/yolo/images/{train,calib,val,test}/` | converted images per split (labels in `data/yolo/labels/`) |
-| `data/yolo/dentex.yaml` | Ultralytics dataset config |
-| `data/yolo/images/test/*.png` | 250 unseen panoramic X-rays, good for trying the app |
-
-### Local web app (Gradio, uses your GPU)
-
-```bash
-python app/app.py        # open http://127.0.0.1:7860
-```
-
-Upload a panoramic X-ray, or pick a test-set example. The app returns:
-- the annotated image
-- a findings table: diagnosis, calibrated confidence, approximate FDI quadrant, status, 90% conformal box interval
-- a plain-language summary
-
-Turn on **MC-dropout** to add detection frequency and diagnosis entropy across stochastic passes. It also flags
-findings where the dropout model disagrees on the diagnosis.
-
-### Deploy to Vercel
-
-Vercel can't host PyTorch (the Python function bundle limit is 500 MB and there's no GPU), so `deploy/vercel/` contains a torch-free
-build: FastAPI + ONNX Runtime with the same preprocessing, calibration and conformal intervals, plus a static upload page.
-
-```bash
-python scripts/export_onnx.py      # writes deploy/vercel/model/{dentex_yolo26s.onnx, meta.json}
-cd deploy/vercel && vercel --prod  # or import the repo in Vercel with Root Directory = deploy/vercel
-```
-
-See [`deploy/vercel/README.md`](deploy/vercel/README.md) for details.
 
 ## Repository layout
 ```
-configs/            training configs (baseline, MC-dropout fine-tune)
-scripts/            download, prepare, uncertainty evaluation
-src/dentex/         conversion, splits, training, evaluation, visualisation
-src/dentex/uncertainty/  matching, conformal prediction + calibration, MC-dropout
-tests/              unit tests (conversion, conformal guarantees, matching)
-results/  assets/   generated metrics, plots and example predictions
+app/app.py                 Gradio web app (upload X-ray -> findings, calibration, conformal intervals, MC-dropout)
+configs/                   training configs (baseline, MC-dropout fine-tune)
+deploy/vercel/             Vercel deployment: FastAPI + ONNX Runtime API, upload page, ONNX model + calibration metadata
+scripts/                   download, prepare, test-label audit, uncertainty evaluation, ONNX export
+src/dentex/                conversion, splits, training, evaluation, visualisation
+src/dentex/uncertainty/    matching + AP, conformal prediction + calibration, MC-dropout
+tests/                     unit tests (conversion, conformal guarantees, matching, MC-dropout)
+results/  assets/          generated metrics, plots and example predictions
 ```
 
 ## Limitations
-- Small dataset (~600 training images) and strong class imbalance (few periapical lesions).
+- Small dataset (605 training images) and strong class imbalance (134 periapical-lesion training boxes).
+- The official test labels use a different, treatment-based protocol. The Deep Caries mapping was informed by test predictions;
+  validation numbers are the clean reference.
 - Conformal guarantees are marginal (per class, on average over images) and assume calibration and test images are
-  exchangeable. The test set comes from the same challenge but was annotated with a different label format.
-- Research code. **Not a medical device** and not for clinical use.
+  exchangeable, which the test label shift weakens.
+- MC-dropout needs a separately fine-tuned model whose scores sit on a different scale. In the apps it annotates baseline
+  findings rather than replacing them, and it isn't available on the Vercel CPU deployment.
+- Research code. **Not a medical device** and not for clinical use. DENTEX data and derived weights are CC BY-NC-SA 4.0
+  (non-commercial).
 
 ## Citation
 ```bibtex

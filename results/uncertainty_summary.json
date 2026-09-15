@@ -1,0 +1,9 @@
+{
+  "alpha": 0.1,
+  "n_calib_images": 100,
+  "n_test_images": 250,
+  "ece_raw": 0.07005958846661936,
+  "ece_platt": 0.03665395428360718,
+  "mc_ap50_mean": 0.4963620372457971,
+  "baseline_ap50_mean": 0.5472183892257516
+}
