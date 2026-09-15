@@ -36,7 +36,8 @@ def inject_dropout(model: nn.Module, p: float = 0.1) -> int:
             continue
         for seq in branches:
             if isinstance(seq, nn.Sequential) and isinstance(seq[-1], nn.Conv2d):
-                seq[-1] = nn.Sequential(MCDropout2d(p), seq[-1])
+                # new modules default to train mode; match the host so an eval model stays deterministic
+                seq[-1] = nn.Sequential(MCDropout2d(p), seq[-1]).train(seq.training)
                 n += 1
     if n == 0:
         raise RuntimeError(f"no head branches found in {type(head).__name__}")
@@ -114,21 +115,20 @@ def fuse_passes(dets: list[Boxes], iou_thr=0.5, num_classes=4):
     classes = np.concatenate([d.cls for d in dets])
     pass_id = np.concatenate([np.full(len(d.xyxy), t) for t, d in enumerate(dets)])
 
-    order = np.argsort(-scores)
-    iou = box_iou(boxes, boxes)
-    assigned = np.full(len(boxes), -1)
+    # sort once by score so "first index per pass" == "highest-scoring candidate of that pass"
+    order = np.argsort(-scores, kind="stable")
+    boxes, scores, classes, pass_id = boxes[order], scores[order], classes[order], pass_id[order]
+    assigned = np.zeros(len(boxes), bool)
     clusters = []
-    for i in order:
-        if assigned[i] >= 0:
+    for i in range(len(boxes)):
+        if assigned[i]:
             continue
-        members, used = [i], {pass_id[i]}
-        assigned[i] = len(clusters)
-        for j in order:
-            if assigned[j] < 0 and pass_id[j] not in used and iou[i, j] >= iou_thr:
-                members.append(j)
-                used.add(pass_id[j])
-                assigned[j] = len(clusters)
-        clusters.append(np.array(members))
+        free = np.flatnonzero(~assigned)
+        cand = free[(box_iou(boxes[i:i + 1], boxes[free])[0] >= iou_thr) & (pass_id[free] != pass_id[i])]
+        _, first = np.unique(pass_id[cand], return_index=True)  # cand is score-sorted -> best per pass
+        members = np.concatenate([[i], cand[np.sort(first)]]).astype(int)
+        assigned[members] = True
+        clusters.append(members)
 
     xyxy, cls, conf, freq, ent, bstd = [], [], [], [], [], []
     for m in clusters:
