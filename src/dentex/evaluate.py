@@ -24,7 +24,7 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     model = YOLO(args.weights)
     m = model.val(data=args.data, split=args.split, imgsz=args.imgsz, batch=args.batch, conf=0.001,
-                  plots=True, project=str(out / "val_runs"), name=args.split, exist_ok=True)
+                  plots=True, project=str((out / "val_runs").resolve()), name=args.split, exist_ok=True)
 
     names = m.names
     rows = []

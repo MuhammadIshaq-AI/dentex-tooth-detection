@@ -5,6 +5,7 @@ runs/
 *.onnx
 *.engine
 *.cache
+*.log
 
 # python
 __pycache__/

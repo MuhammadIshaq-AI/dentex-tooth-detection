@@ -22,6 +22,8 @@ def main():
     args = ap.parse_args()
 
     cfg = yaml.safe_load(Path(args.config).read_text()) | parse_overrides(args.set)
+    # Ultralytics nests relative project dirs under runs/<task>/; make it absolute so runs land where configured
+    cfg["project"] = str(Path(cfg.get("project", "runs/dentex")).resolve())
     dropout_p = cfg.pop("mc_dropout", None)
     model = YOLO(cfg.pop("model"))
 
