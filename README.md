@@ -17,10 +17,31 @@ guarantees, and MC-dropout uncertainty**.
 
 ## Results
 
-### Per-class detection (official DENTEX test set)
+### Per-class detection
 
-<!-- results/metrics_test.md -->
-_Pending training run._
+YOLO26-s, 1024 px, best epoch 43 of 73 (early stopping, patience 30). Trained in 58 min on an RTX 3050 Laptop (6 GB).
+
+**Official validation set** (50 images, original DENTEX diagnosis labels):
+
+| Class | Precision | Recall | AP50 | AP50-95 |
+|---|---:|---:|---:|---:|
+| Impacted | 0.742 | 0.865 | 0.897 | 0.593 |
+| Caries | 0.455 | 0.465 | 0.449 | 0.308 |
+| Periapical Lesion | 0.665 | 0.442 | 0.491 | 0.294 |
+| Deep Caries | 0.508 | 0.656 | 0.640 | 0.462 |
+| **All** | **0.593** | **0.607** | **0.619** | **0.415** |
+
+**Official test set** (250 images, treatment-code labels mapped to diagnoses; see [label audit](#test-label-audit)):
+
+| Class | Precision | Recall | AP50 | AP50-95 |
+|---|---:|---:|---:|---:|
+| Impacted | 0.853 | 0.928 | 0.932 | 0.586 |
+| Caries | 0.497 | 0.427 | 0.482 | 0.335 |
+| Periapical Lesion | 0.567 | 0.373 | 0.431 | 0.264 |
+| Deep Caries | 0.491 | 0.532 | 0.434 | 0.271 |
+| **All** | **0.602** | **0.565** | **0.569** | **0.364** |
+
+Inference: ~8 ms per image at 1024 px on the laptop GPU.
 
 ### Example outputs
 
@@ -44,10 +65,28 @@ _Pending._
 - **train / calib**: the 705 fully-annotated DENTEX training images, split (stratified by rarest class) into
   ~605 for training and **100 held out for calibration**. Calibration images are never trained on.
 - **val**: official 50-image validation set (model selection).
-- **test**: official 250-image test set. Its labels are released as LabelMe polygons with a wider clinical
-  vocabulary. They are converted to boxes and mapped `çürük → Caries`, `küretaj → Deep Caries`,
-  `gömülü → Impacted` and `lezyon → Periapical Lesion`; non-diagnosis codes (healthy, root canal,
-  extraction, fracture) are dropped. See `src/dentex/convert.py`.
+- **test**: official 250-image test set. Its labels are released as LabelMe polygons with Turkish
+  **treatment-planning codes**, not the four challenge diagnoses. They are converted to boxes and mapped using the audit below.
+
+#### Test-label audit
+
+`scripts/audit_test_labels.py` matches every test polygon (all codes) to the best-overlapping baseline prediction
+(conf ≥ 0.25, IoU ≥ 0.3) and tabulates which class the model predicts (% of shapes):
+
+| Test code | Shapes | Impacted | Caries | Periapical | Deep Caries | No detection | Mapped to |
+|---|---:|---:|---:|---:|---:|---:|---|
+| 6 gömülü (impacted) | 221 | **91.9** | 1.4 | 0.0 | 1.4 | 5.4 | Impacted |
+| 1 çürük (caries) | 747 | 0.9 | **43.4** | 0.3 | 5.6 | 49.8 | Caries |
+| 7 lezyon (lesion) | 75 | 0.0 | 10.7 | **36.0** | 17.3 | 36.0 | Periapical Lesion |
+| 3 kanal (root canal) | 161 | 1.9 | 19.3 | 6.8 | **49.1** | 23.0 | Deep Caries |
+| 5 çekim (extraction) | 29 | 0.0 | 0.0 | 10.3 | **65.5** | 24.1 | Deep Caries |
+| 2 küretaj (curettage) | 265 | 0.0 | 5.3 | 0.4 | 2.3 | **92.1** | dropped |
+| 0 sağlam (healthy) | 91 | 2.2 | 5.5 | 0.0 | 0.0 | **92.3** | dropped |
+| 8 kırık (fracture) | 11 | 0.0 | 0.0 | 0.0 | 9.1 | **90.9** | dropped |
+
+Clinically this is consistent: deep caries is what gets root-canal treatment or extraction, while küretaj is
+periodontal curettage. **Caveat:** the Deep Caries mapping was chosen after looking at test-set predictions, so treat
+test numbers for that class as optimistic. The validation set, which uses the original labels, is the clean reference.
 
 ### Uncertainty quantification (`src/dentex/uncertainty/`)
 1. **Confidence calibration.** Per-class Platt scaling fitted on `calib`; ECE and reliability diagram on `test`.
